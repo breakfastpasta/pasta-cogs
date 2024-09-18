@@ -1,0 +1,12 @@
+{
+  "author": ["breakfastpasta"],
+  "description": "Simple cog for signing teams up for game lobbies",
+  "install_msg": "Thanks for installing `signup`. See `[p]help signup` for details.",
+  "short": "Sign teams up for a game",
+  "hidden": false,
+  "disabled": false,
+  "required_cogs": {},
+  "requirements": [],
+  "tags": ["team", "signup", "lobby"],
+  "type": "COG"
+}
