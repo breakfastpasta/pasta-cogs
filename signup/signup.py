@@ -52,7 +52,7 @@ class SignUp(commands.Cog):
     @app_commands.guild_only()
     #@app_commands.describe(team_name="Your team's name")
     #@app_commands.describe(players="List of player mentions")
-    async def signup(self, interaction: discord.Interaction, team_name: str, *players: discord.Member):
+    async def signup(self, interaction: discord.Interaction, team_name: str):
         guild_group = self.config.guild(ctx.guild)
         #async with guild_group.current_teams() as current_teams:
         #    current_teams[team_name] = players
