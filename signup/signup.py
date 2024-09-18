@@ -23,7 +23,7 @@ class SignUp(commands.Cog):
 
     @commands.admin_or_permissions(manage_guild=True)
     @commands.guild_only()
-    @commands.group(autohelp=True, aliases:["signups"])
+    @commands.group(autohelp=True, aliases=["signups"])
     async def signup(self, ctx: commands.Context):
         """Manage signup settings"""
         pass
