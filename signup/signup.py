@@ -32,7 +32,6 @@ class SignUp(commands.Cog):
     @commands.admin_or_permissions(manage_guild=True)
     async def setteamsize(self, ctx, new_value):
         """Sets the team size for signups"""
-        # Your code will go here
         if not new_value.isdigit():
             await ctx.send("Please enter an integer value")
             return
@@ -40,6 +39,7 @@ class SignUp(commands.Cog):
         await ctx.send("Set the max team size: " + new_value)
 
     @signup.command()
+    @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def wipedata(self, ctx):
         self.config.guild(ctx.guild).clear() 
