@@ -17,18 +17,22 @@ class SignUp(commands.Cog):
             "roster_map": {},
             "team_points": {},
         }
+        default_member = {
+            "team_history": []
+        }
         self.config.register_guild(**default_guild)
+        self.config.register_member(**default_member)
 
         self.bot = bot
 
     @commands.admin_or_permissions(manage_guild=True)
     @commands.guild_only()
-    @commands.group(name="signup", autohelp=True, aliases=["signups"])
-    async def signup(self, ctx: commands.Context):
+    @commands.group(name="signupset", autohelp=True, aliases=["setsignup"])
+    async def signupset(self, ctx: commands.Context):
         """Manage signup settings"""
         pass
 
-    @signup.command()
+    @signupset.command()
     @commands.admin_or_permissions(manage_guild=True)
     async def setteamsize(self, ctx, new_value):
         """Sets the team size for signups"""
@@ -38,7 +42,7 @@ class SignUp(commands.Cog):
         await self.config.guild(ctx.guild).team_size.set(int(new_value))
         await ctx.send("Set the max team size: " + new_value)
 
-    @signup.command()
+    @signupset.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def wipedata(self, ctx):
