@@ -34,7 +34,7 @@ class SignUp(commands.Cog):
 
     @signupset.command()
     @commands.admin_or_permissions(manage_guild=True)
-    async def setteamsize(self, ctx, new_value):
+    async def teamsize(self, ctx, new_value):
         """Sets the team size for signups"""
         if not new_value.isdigit():
             await ctx.send("Please enter an integer value")
@@ -52,7 +52,7 @@ class SignUp(commands.Cog):
     @app_commands.guild_only()
     #@app_commands.describe(team_name="Your team's name")
     #@app_commands.describe(players="List of player mentions")
-    async def signup(self, interaction: discord.Interaction):
+    async def signup(self, interaction: discord.Interaction, team_name: str, *players: discord.Member):
         guild_group = self.config.guild(ctx.guild)
         #async with guild_group.current_teams() as current_teams:
         #    current_teams[team_name] = players
