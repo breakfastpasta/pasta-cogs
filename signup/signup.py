@@ -142,9 +142,9 @@ class SignUp(commands.Cog):
         async def checkinput():
             msg = ""
             if len(players) != team_size:
-                msg += "Incorrect number of players. Please enter {team_size} player mentions.\n"
+                msg += f"Incorrect number of players. Please enter {team_size} player mentions.\n"
             if len(players) != len(set(players)):
-                msg += "Duplicate player entries. 6 unique players required\n"
+                msg += f"Duplicate player entries. {team_size} unique players required\n"
             for p in players:
                 member = self._getmember(interaction.guild, p)
                 if not member:
@@ -158,7 +158,7 @@ class SignUp(commands.Cog):
                 msg += "You must be a part of the team\n"
             async with guild_group.current_teams() as current_teams:
                 if team_name in current_teams:
-                    msg += "Team name already registered. Please use a different name.\n"
+                    msg += f"{team_name} already registered. Please use a different name.\n"
             
             return msg
         
