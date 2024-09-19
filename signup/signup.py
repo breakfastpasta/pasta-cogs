@@ -25,6 +25,9 @@ class SignUp(commands.Cog):
 
         self.bot = bot
 
+    async def get_config(self, guild: discord.Guild):
+        config = await self.config.guild(guild).get_raw
+
     @commands.admin_or_permissions(manage_guild=True)
     @commands.guild_only()
     @commands.group(name="signupset", autohelp=True, aliases=["setsignup"])
@@ -46,7 +49,24 @@ class SignUp(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def wipedata(self, ctx):
-        self.config.guild(ctx.guild).clear() 
+        """Wipes the server's config"""
+        self.config.guild(ctx.guild).clear()
+
+    @signupset.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def showconfig(self, ctx):
+        """Shows the server's current config"""
+        guild_group = self.config.guild(ctx.guild)
+        conf = guild_group.all()
+        msg = ""
+        for k,v in conf.items():
+            msg.append(f"{k} :\n")
+            try:
+                msg.append(f"    {sk}: {sv}") for sk,sv in v.items()
+            except TypeError:
+                msg.append(f"    {v}\n")
+        await ctx.send(msg)
 
     @app_commands.command()
     @app_commands.guild_only()
