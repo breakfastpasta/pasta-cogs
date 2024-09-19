@@ -63,7 +63,7 @@ class SignUp(commands.Cog):
         for k,v in conf.items():
             msg.append(f"{k} :\n")
             try:
-                msg.append(f"    {sk}: {sv}") for sk,sv in v.items()
+                msg.append([f"    {sk}: {sv}" for sk,sv in v.items()])
             except TypeError:
                 msg.append(f"    {v}\n")
         await ctx.send(msg)
