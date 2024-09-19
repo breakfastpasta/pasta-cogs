@@ -13,6 +13,7 @@ class SignUp(commands.Cog):
         self.config = Config.get_conf(self, identifier=UNIQUE_ID, force_registration=True)
         default_guild = {
             "team_size": 6,
+            "bracket_size": 8,
             "sender_is_captain": True,
             "current_teams": {},
             "roster_map": {},
@@ -70,6 +71,21 @@ class SignUp(commands.Cog):
     @config.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
+    async def showteams(self, ctx):
+        guild_group = self.config.guild(ctx.guild)
+        msg = ""
+        async with guild_group.current_teams() as current_teams:
+            for team, details in current_teams.items():
+                msg += f"**{team}** :\n"
+                msg += f"- captain: {ctx.guild.get_member(details['captain']).mention}\n"
+                msg += f"- roster: {' '.join([ctx.guild.get_member(p).mention for p in details['roster']])}\n"
+        
+        await ctx.send(msg)
+
+
+    @config.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
     async def teamsize(self, ctx, new_value: str):
         """Sets the team size for signups"""
         if not new_value.isdigit():
@@ -81,6 +97,17 @@ class SignUp(commands.Cog):
     @config.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
+    async def bracketsize(self, ctx, new_value: str):
+        """Sets the amount of initial teams in the bracket"""
+        if not new_value.isdigit():
+            await ctx.send("Please enter an integer value")
+            return
+        await self.config.guild(ctx.guild).bracket_size.set(int(new_value))
+        await ctx.send("Set the max bracket size: " + new_value + "teams")
+
+    @config.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
     async def senderiscaptain(self, ctx, new_value: bool):
         """Sets whether the command sender will be captain, otherwise first player listed"""
         await self.config.guild(ctx.guild).sender_is_captain.set(new_value)
@@ -88,22 +115,18 @@ class SignUp(commands.Cog):
 
     @staticmethod
     def _getmember(guild, mention: str):
-        pattern = r'<@.*[0-9]>'
-        id = ""
-        if re.fullmatch(pattern, mention):
-            id = int(mention[2:-1])
-        else:
-            return None
+        id = int(mention[2:-1])
 
         try: 
             member = guild.get_member(id)
-            return member
+            if not member.bot :
+                return member
         except:
             return None
 
     async def _player_is_registered(self, guild, user_id):
         async with self.config.guild(guild).current_teams() as current_teams:
-            return user_id in sum([v for v in current_teams.values()], [])
+            return user_id in sum([v["roster"] for v in current_teams.values()], [])
 
     @app_commands.command()
     @app_commands.guild_only()
@@ -112,7 +135,7 @@ class SignUp(commands.Cog):
     async def signup(self, interaction: discord.Interaction, team_name: str, players: str):
         team_name = re.sub(r'[^a-zA-Z0-9@.!#$%^&_+\s]', '', team_name)
         guild_group = self.config.guild(interaction.guild)
-        players = re.sub(r'[^<>@0-9\s]', '', players.strip()).split()
+        players = re.findall(r'<@[0-9]*>', re.sub(r'[^<>@0-9\s]', '', players.strip()))
         team_size = await self.config.guild(interaction.guild).team_size()
         player_ids = []
 
@@ -147,4 +170,4 @@ class SignUp(commands.Cog):
         async with guild_group.current_teams() as current_teams:
             current_teams[team_name] = {"captain": interaction.user.id if await guild_group.sender_is_captain() else player_ids[0], "roster": player_ids}
             
-        await interaction.response.send_message(f"Signed up `{team_name}` with players {players}", ephemeral=False)
+        await interaction.response.send_message(f"Signed up `{team_name}` with players {' '.join(players)}", ephemeral=False)
