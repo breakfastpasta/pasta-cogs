@@ -12,6 +12,7 @@ class SignUp(commands.Cog):
     def __init__(self, bot):
         self.config = Config.get_conf(self, identifier=UNIQUE_ID, force_registration=True)
         default_guild = {
+            "signups_open": False,
             "team_size": 6,
             "bracket_size": 8,
             "sender_is_captain": True,
@@ -36,6 +37,44 @@ class SignUp(commands.Cog):
     async def signupset(self, ctx: commands.Context):
         """Manage signup settings"""
         pass
+
+    @signupset.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def toggleopen(self, ctx: commands.Context):
+        """Toggles whether signups are open on the server"""
+        new_value = not await self.config.guild(ctx.guild).signups_open()
+        await self.config.guild(ctx.guild).signups_open.set(new_value)
+        await ctx.send(f"Signups open status: {new_value}")
+
+    @signupset.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def unregister(self, ctx: commands.Context, team: str):
+        """Unregister a team"""
+        async with self.config.guild(ctx.guild).current_teams() as current_teams:
+            if current_teams.pop(team, None):
+                await ctx.send(f"Unregistered team `{team}`")
+                return
+            await ctx.send(f"Specified team does not exist")
+
+    @signupset.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def showteams(self, ctx):
+        """Shows all currently registered teams"""
+        guild_group = self.config.guild(ctx.guild)
+        msg = ""
+        async with guild_group.current_teams() as current_teams:
+            for team, details in current_teams.items():
+                msg += f"`{team}` :\n"
+                msg += f"- captain: {ctx.guild.get_member(details['captain']).mention}\n"
+                msg += f"- roster: {' '.join([ctx.guild.get_member(p).mention for p in details['roster']])}\n"
+        
+        if msg:
+            await ctx.send(msg)
+        else:
+            await ctx.send("No teams to show")
     
     @signupset.group(name="config", autohelp=True, aliases=["conf"])
     @commands.guild_only()
@@ -61,27 +100,12 @@ class SignUp(commands.Cog):
         async with guild_group.all() as conf:
             msg = ""
             for k,v in conf.items():
-                msg += (f"{k} :\n")
+                msg += f"`{k}` :\n"
                 try:
-                    msg += "\n".join([f"    {sk}: {sv}" for sk,sv in v.items()]) + "\n"
+                    msg += ''.join(f"    `{sk}`: `{sv}`\n" for sk,sv in v.items())
                 except (TypeError, AttributeError) as e:
-                    msg += (f"    {v}\n")
+                    msg += f"    `{v}`\n"
         await ctx.send(msg)
-
-    @config.command()
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def showteams(self, ctx):
-        guild_group = self.config.guild(ctx.guild)
-        msg = ""
-        async with guild_group.current_teams() as current_teams:
-            for team, details in current_teams.items():
-                msg += f"**{team}** :\n"
-                msg += f"- captain: {ctx.guild.get_member(details['captain']).mention}\n"
-                msg += f"- roster: {' '.join([ctx.guild.get_member(p).mention for p in details['roster']])}\n"
-        
-        await ctx.send(msg)
-
 
     @config.command()
     @commands.guild_only()
@@ -133,6 +157,10 @@ class SignUp(commands.Cog):
     @app_commands.describe(team_name="Your team's name")
     @app_commands.describe(players="List of player mentions")
     async def signup(self, interaction: discord.Interaction, team_name: str, players: str):
+        if not await self.config.guild(interaction.guild).signups_open():
+            await interaction.response.send_message("Signups are currently closed.", ephemeral=True)
+            return
+
         team_name = re.sub(r'[^a-zA-Z0-9@.!#$%^&_+\s]', '', team_name)
         guild_group = self.config.guild(interaction.guild)
         players = re.findall(r'<@[0-9]*>', re.sub(r'[^<>@0-9\s]', '', players.strip()))
