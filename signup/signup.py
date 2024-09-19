@@ -59,14 +59,15 @@ class SignUp(commands.Cog):
         """Shows the server's current config"""
         guild_group = self.config.guild(ctx.guild)
         conf = guild_group.all()
-        msg = ""
-        for k,v in conf.items():
-            msg.append(f"{k} :\n")
-            try:
-                msg.append([f"    {sk}: {sv}" for sk,sv in v.items()])
-            except TypeError:
-                msg.append(f"    {v}\n")
-        await ctx.send(msg)
+        print(conf + type(conf))
+        # msg = ""
+        # for k,v in conf.items():
+        #     msg.append(f"{k} :\n")
+        #     try:
+        #         msg.append([f"    {sk}: {sv}" for sk,sv in v.items()])
+        #     except TypeError:
+        #         msg.append(f"    {v}\n")
+        # await ctx.send(msg)
 
     @app_commands.command()
     @app_commands.guild_only()
