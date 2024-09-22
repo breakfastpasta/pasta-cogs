@@ -7,8 +7,10 @@ import typing
 from redbot.core.utils.chat_formatting import box
 
 BUTTONS = [
-    {"style": 3, "label": "Confirm", "emoji": None, "custom_id": "confirm_button"},
-    {"style": 4, "label": "Undo", "emoji": None, "custom_id": "undo_button"}
+    {"style": 3, "label": "Confirm", "emoji": "✅", "custom_id": "confirm_button"},
+    {"style": 4, "label": "Undo", "emoji": "🔙", "custom_id": "undo_button"},
+    {"style": 2, "label": "Clear Selections", "emoji": "🧹", "custom_id": "clear_button"},
+    {"style": 1, "label": "Save + complete", "emoji": "💾", "custom_id": "save_button"}
 ]
 
 class TournamentView(discord.ui.View):
@@ -37,10 +39,10 @@ class TournamentView(discord.ui.View):
         current_buttons = self.BUTTONS
         current_selections = self.SELECTIONS
         self.clear_items()
-        for button in current_buttons:
-            self.add_item(button)
         for selection in current_selections:
             self.add_item(selection)
+        for button in current_buttons:
+            self.add_item(button)
         self._message: discord.Message = await self.ctx.send(
             embed=await self.cog.get_embed(self.ctx, self._selected), view=self
         )
@@ -77,46 +79,48 @@ class TournamentView(discord.ui.View):
             self.SELECTIONS.append(selection)
     
     async def _callback(self, interaction: discord.Interaction) -> None:
-        print(interaction.data)
         if interaction.data["custom_id"] == "confirm_button":
-            print("on the block")
             await self.cog.update_bracket(interaction.guild, self._selected)
-            print('bracket updated')
-            print('entering get_matchups()...')
             matchups = await self.cog.get_matchups(interaction.guild)
-            print(f'matchups acquired: {matchups=}')
             self._refresh_selections(matchups)
-            print('selections refreshed')
             current_selections = self.SELECTIONS
             current_buttons = self.BUTTONS
-            print('clearing items...')
             self.clear_items()
-            print('re-adding items')
             for selection in current_selections:
                 self.add_item(selection)
-                print(f'added {selection}')
             for button in current_buttons:
                 self.add_item(button)
-                print(f'added {button}')
 
-            pass
-            await interaction.response.edit_message(view=self)
             self._selected.clear()
-            return
         if interaction.data["custom_id"] == "undo_button":
-            #await self.cog.revert_bracket()
+            await self.cog.revert_bracket(interaction.guild)
+            self._selected.clear()
+            self._refresh_selections(await self.cog.get_matchups(interaction.guild))
+            current_selections = self.SELECTIONS
+            current_buttons = self.BUTTONS
+            self.clear_items()
+            for selection in current_selections:
+                self.add_item(selection)
+            for button in current_buttons:
+                self.add_item(button)
             #undo
             pass
-            await interaction.response.edit_message(view=self)
-            return
+        if interaction.data["custom_id"] == "clear_button":
+            self._selected.clear()
         if interaction.data["component_type"] == 3:
-            print(interaction.data)
-            self._selected.append(interaction.data['values'])
+            self._selected.extend(interaction.data['values'])
             #append selected item to selections
             #refresh message to show selection
             #self._selected.append()
             pass
-        print(self._selected)
+        if interaction.data["custom_id"] == "save_button":
+            await interaction.response.defer()
+            response = await self.cog.save_session(interaction.guild)
+            await interaction.followup.send(response)
+            await self.on_timeout()
+            self.stop()
+            return
         await interaction.response.edit_message(
-            embed=await self.cog.get_embed(self.ctx, self._selected)
+            embed=await self.cog.get_embed(self.ctx, self._selected),
+            view=self
         )

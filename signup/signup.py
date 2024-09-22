@@ -5,11 +5,15 @@ import random
 import math
 import typing
 import datetime
+import os
+import json
+import io
 
 from collections import deque
 
 from redbot.core import Config
 from redbot.core import commands, app_commands
+from redbot.core import data_manager
 
 from .bracket import Bracket, BracketNode
 from .view import TournamentView
@@ -77,6 +81,7 @@ class SignUp(commands.Cog):
             new_id = max(int(id) for id in sessions) + 1 if sessions else 1
             session['id'] = new_id
             session['bracket'] = None
+            session['bracket_history'] = []
             session['teams'] = {}
             session['match_queue'] = []
             session['date'] = int(time.time())
@@ -98,56 +103,46 @@ class SignUp(commands.Cog):
     @commands.admin_or_permissions(manage_guild=True)
     async def savesession(self, ctx: commands.Context):
         """Saves the current session to history"""
-        guild_group = self.config.guild(ctx.guild)
-        async with guild_group.session() as session, guild_group.sessions() as sessions, guild_group.teams() as teams:
-            if not session:
-                msg = "no session to save\n"
-                await ctx.send(msg)
-                return
-            sessions[str(session['id'])] = {
-                'bracket': session['bracket'],
-                'teams': session['teams'],
-                'date': session['date'],
-            }
-            for team in session['teams']:
-                if team not in teams:
-                    teams[team] = {
-                        'players': [],
-                        'points': 0,
-                        'points_total': 0,
-                        'captains': [],
-                        'matches': 0,
-                        'scrim_wins': 0,
-                        'cup_wins': 0,
-                    }
-                captains = set(teams[team]['captains'])
-                captains.add(session['teams'][team]['captain'])
-                players = set(teams[team]['players']) | set(session['teams'][team]['roster'])
-                teams[team]['captains'] = list(captains)
-                teams[team]['players'] = list(players)
-                teams[team]['points'] += session['teams'][team]['points']
-                teams[team]['points_total'] += session['teams'][team]['points']
-                teams[team]['matches'] += 0
-                teams[team]['scrim_wins'] += 0
-                teams[team]['cup_wins'] += 0
-            session.clear()
-
+        return await self._save_session(ctx.guild)
 
     @session.command(name='show')
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def showsession(self, ctx: commands.Context):
         """Shows the current session"""
-        msg = ""
+        embed: discord.Embed = discord.Embed(
+            title="Session static overview",
+            color=await ctx.embed_color()
+        )
         async with self.config.guild(ctx.guild).session() as session:
             if session:
-                msg += f"id: `{str(session['id'])}`\n"
-                msg += f"date: <t:{str(session['date'])}:F>\n"
+                desc = "No bracket"
                 if session['bracket']:
-                    msg += f"```{Bracket().from_dict(session['bracket']).show_tree()}```"
-                msg += f"`{str(session['teams'])}`\n"
-                msg += f"match buffer: `{str(session['match_queue'])}`"
-                await ctx.send(msg)
+                    desc += f"```{Bracket().from_dict(session['bracket']).show_tree()}```"
+                embed.add_field(name="id", value=f"`{str(session['id'])}`", inline=False)
+                embed.add_field(name="date", value=f"<t:{str(session['date'])}:F>", inline=False)
+                for team in session['teams']:
+                    players_readable = []
+                    captain_mention = session['teams'][team]['roster'][0]
+                    for player in session['teams'][team]['roster']:
+                        guild_member = ctx.guild.get_member(player)
+                        if guild_member:
+                            mention = guild_member.mention
+                            if player == session['teams'][team]['captain']:
+                                captain_mention = guild_member.mention
+                        else:
+                            mention = player
+                        players_readable.append(mention)
+                        
+                    field_value = f"{' '.join(players_readable)}\ncaptain: {captain_mention}"
+                    embed.add_field(name=session['teams'][team]['name'], value=field_value, inline=True)
+                if session['match_queue']:
+                    embed.add_field(name="current matchups", value="\n".join(f"{t1} vs. {t2}" for t1, t2 in session['match_queue']), inline=False)
+                
+                embed.description = desc
+                embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+                embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon)
+                await ctx.send(embeds=[embed])
                 return
             await ctx.send("no session to show")
     
@@ -157,6 +152,9 @@ class SignUp(commands.Cog):
     async def _viewsession(self, ctx: commands.Context):
         matchups = []
         async with self.config.guild(ctx.guild).session() as session:
+            if not session:
+                await ctx.send("no session!")
+                return
             matchups = session['match_queue']
         await TournamentView(cog=self).start(ctx, matchups=matchups)
 
@@ -203,7 +201,6 @@ class SignUp(commands.Cog):
         matches = await self._queue_matches(ctx.guild)
         await ctx.send(f'placed {matches} into the queue')
     
-
     @session.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
@@ -257,21 +254,30 @@ class SignUp(commands.Cog):
         await self.config.guild(ctx.guild).clear()
         await ctx.send("Config cleared.")
 
-    @config.command(name='show')
+    # @config.command(name='show')
+    # @commands.guild_only()
+    # @commands.admin_or_permissions(manage_guild=True)
+    # async def showconfig(self, ctx):
+    #     """Shows the server's current config"""
+    #     guild_group = self.config.guild(ctx.guild)
+    #     async with guild_group.all() as conf:
+    #         msg = ""
+    #         for k,v in conf.items():
+    #             msg += f"`{k}` :\n"
+    #             try:
+    #                 msg += ''.join(f"    `{sk}`: `{sv}`\n" for sk,sv in v.items())
+    #             except (TypeError, AttributeError) as e:
+    #                 msg += f"    `{v}`\n"
+    #     await ctx.send(msg)
+
+    @config.command(name='get')
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    async def showconfig(self, ctx):
-        """Shows the server's current config"""
-        guild_group = self.config.guild(ctx.guild)
-        async with guild_group.all() as conf:
-            msg = ""
-            for k,v in conf.items():
-                msg += f"`{k}` :\n"
-                try:
-                    msg += ''.join(f"    `{sk}`: `{sv}`\n" for sk,sv in v.items())
-                except (TypeError, AttributeError) as e:
-                    msg += f"    `{v}`\n"
-        await ctx.send(msg)
+    async def getconfig(self, ctx):
+        """Get the current cog config as json file"""
+        path = os.path.join(data_manager.cog_data_path(self), 'settings.json')
+        discord_file = discord.File(path, filename='db.json')
+        await ctx.send(file=discord_file)
 
     @config.command()
     @commands.guild_only()
@@ -317,7 +323,6 @@ class SignUp(commands.Cog):
     async def get_embed(
         self, ctx: commands.Context, selected: typing.Optional[list]
     ) -> discord.Embed:
-        print(f"in get_embed: {selected=}")
         embed: discord.Embed = discord.Embed(
             title="Session view",
             color=await ctx.embed_color(),
@@ -334,13 +339,13 @@ class SignUp(commands.Cog):
                     elif t2.val in selected:
                         field_value = t2.val
                     else:
-                        field_value = "*Unconfirmed*"
+                        field_value = "*Undecided*"
                     embed.add_field(name=f"`{t1.val} vs. {t2.val}`", value=field_value, inline=True)
                 bracket_codeblock = bracket.show_tree()
                 embed.description = f"```{bracket_codeblock}```"
         
         
-        embed.set_thumbnail(url="https://example.com/example.png")
+        #embed.set_thumbnail(url="https://example.com/example.png")
         embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
         embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon)
         return embed
@@ -348,34 +353,26 @@ class SignUp(commands.Cog):
     async def update_bracket(self, guild, winners):
         await self._update_bracket(guild, winners)
     
+    async def save_session(self, ctx):
+        return await self._save_session(ctx)
+
     async def _update_bracket(self, guild, winners):
-        print("entered _update_bracket()")
         guild_group = self.config.guild(guild)
-        print(f"{guild_group=}")
         async with guild_group.session() as session:
-            print("config open")
             bracket = Bracket().from_dict(session['bracket'])
-            print(f"{bracket=}")
             matchups = bracket.get_matchups()
-            print(f"{matchups=}")
-            print(f"looping through matchups")
             for t1, t2 in matchups:
-                print(f"loop run")
                 if t1.val in winners:
-                    print(f"t1.val in winners {t1.val=}")
                     t1.parent.val = t1.val
-                    print(f"t1.val propogated {t1.val=}")
                 if t2.val in winners:
-                    print(f"t2.val in winners {t2.val=}")
                     t2.parent.val = t2.val
-                    print(f"t1.val propogated {t1.val=}")
-            print('saving session bracket...')
+            session['bracket_history'].append(session['bracket'])
             session['bracket'] = dict(bracket)
-            print('clearing match_queue')
             session['match_queue'].clear()
-            print('queueing the next matches')
-            await self._queue_matches(guild)
-            print('done')
+        await self._queue_matches(guild)
+    
+    async def revert_bracket(self, guild):
+        await self._revert_bracket(guild)
                 
     async def _generate_bracket(self, guild):
         guild_group = self.config.guild(guild)
@@ -399,23 +396,64 @@ class SignUp(commands.Cog):
         async with guild_group.sessions() as sessions, guild_group.teams() as teams:
             pass
         await guild_group.session.set(None)
+
+    async def _revert_bracket(self, guild):
+        guild_group = self.config.guild(guild)
+        async with guild_group.session() as session:
+            history = session['bracket_history']
+            if history:
+                session['bracket'] = history.pop()
     
     async def _queue_matches(self, guild):
         async with self.config.guild(guild).session() as session:
             bracket = Bracket().from_dict(session['bracket'])
             matches = bracket.get_matchups()
-            session['match_queue'].extend([[t1.val, t2.val] for t1, t2 in matches])
+            session['match_queue'] = [[t1.val, t2.val] for t1, t2 in matches]
             return matches
+
+    async def _save_session(self, guild):
+        guild_group = self.config.guild(guild)
+        async with guild_group.session() as session, guild_group.sessions() as sessions, guild_group.teams() as teams:
+            if not session:
+                return "no session to save"
+            session_id = session['id']
+            sessions[str(session_id)] = {
+                'bracket': session['bracket'],
+                'teams': session['teams'],
+                'date': session['date'],
+            }
+            for team in session['teams']:
+                if team not in teams:
+                    teams[team] = {
+                        'players': [],
+                        'points': 0,
+                        'points_total': 0,
+                        'captains': [],
+                        'matches': 0,
+                        'scrim_wins': 0,
+                        'cup_wins': 0,
+                    }
+                captains = set(teams[team]['captains'])
+                captains.add(session['teams'][team]['captain'])
+                players = set(teams[team]['players']) | set(session['teams'][team]['roster'])
+                teams[team]['captains'] = list(captains)
+                teams[team]['players'] = list(players)
+                teams[team]['points'] += session['teams'][team]['points']
+                teams[team]['points_total'] += session['teams'][team]['points']
+                teams[team]['matches'] += 0
+                teams[team]['scrim_wins'] += 0
+                teams[team]['cup_wins'] += 0
+            session.clear()
+            
+            return f"Saved session with id `{session_id}`"
+
 
     async def get_matchups(self, guild):
         return await self._get_matchups(guild)
     
     async def _get_matchups(self, guild):
-        print('entered _get_matchups()')
         async with self.config.guild(guild).session() as session:
-            print('in async')
             matchups = Bracket().from_dict(session['bracket']).get_matchups()
-            print(f'got the matchups from bracket: {matchups=}')
             h_matchups = []
             h_matchups.extend([[t1.val, t2.val] for t1, t2 in matchups])
             return h_matchups
@@ -450,13 +488,10 @@ class SignUp(commands.Cog):
         async with guild_group.session() as session, guild_group.teams() as teams:
             bracket = Bracket().from_dict(session['bracket'])
             competitors = deque(sorted(session['teams'].keys(), key=lambda x: teams[x]['points'] if x in teams else 0))
-            print(f'{competitors=}')
 
             leaf_nodes = []
             bracket.get_leaf_nodes(leaf_nodes)
-            print(f'{[l.val for l in leaf_nodes]}')
             leaf_nodes.sort(key=lambda x: bracket.get_node_depth(x), reverse=True)
-            print(f'post sort {[l.val for l in leaf_nodes]}')
             
             flip = 0
             while competitors and leaf_nodes:
@@ -464,7 +499,6 @@ class SignUp(commands.Cog):
                 temp = competitors.popleft()
                 prev = node.val
                 node.val = temp
-                print(f'popped {temp} into node w previous value {prev}')
                 leaf_nodes.remove(node)
                 flip = 0 if flip else -1
 

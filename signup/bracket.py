@@ -106,9 +106,11 @@ class Bracket:
 
         matchups = []
 
-        if node.left and node.right:
+        if node.left and node.right and node.val is None:
             if node.left.val and node.right.val:
                 matchups.append((node.left, node.right))
+                stop = True
+                return matchups
 
         matchups.extend(self._get_matchups(node.left))
         matchups.extend(self._get_matchups(node.right))
