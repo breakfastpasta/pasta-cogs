@@ -34,6 +34,8 @@ class SignUp(commands.Cog):
             "sender_is_captain": True,
             "session": {},
             "teams": {},
+            "signup_channel": {},
+            "default_thread_channel": None,
             "sessions": {},
         }
         default_member = {
@@ -74,6 +76,7 @@ class SignUp(commands.Cog):
     async def newsession(self, ctx: commands.Context):
         """Start a new session"""
         guild_group = self.config.guild(ctx.guild)
+        threadchannel = await guild_group.default_thread_channel()
         async with guild_group.session() as session, guild_group.sessions() as sessions:
             if session:
                 await ctx.send(f"Session in progress. Please save current session first with `[p]signupset session save`.")
@@ -85,6 +88,7 @@ class SignUp(commands.Cog):
             session['teams'] = {}
             session['match_queue'] = []
             session['date'] = int(time.time())
+            session['threadchannel'] = threadchannel
 
             await ctx.send(f"New session created with id `{new_id}`.")
 
@@ -108,40 +112,48 @@ class SignUp(commands.Cog):
     @session.command(name='show')
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    async def showsession(self, ctx: commands.Context):
+    async def showsession(self, ctx: commands.Context, session_id=None):
         """Shows the current session"""
         embed: discord.Embed = discord.Embed(
             title="Session static overview",
             color=await ctx.embed_color()
         )
-        async with self.config.guild(ctx.guild).session() as session:
-            if session:
+        guild_group = self.config.guild(ctx.guild)
+        async with guild_group.session() as session, guild_group.sessions() as sessions:
+            
+            to_show = session
+            if session_id and not session_id == session['id']:
+                to_show = sessions[session_id]
+            else:
+                session_id = session['id']
+                
+            if to_show:
                 desc = "No bracket"
-                if session['bracket']:
-                    desc += f"```{Bracket().from_dict(session['bracket']).show_tree()}```"
-                embed.add_field(name="id", value=f"`{str(session['id'])}`", inline=False)
-                embed.add_field(name="date", value=f"<t:{str(session['date'])}:F>", inline=False)
-                for team in session['teams']:
+                if to_show['bracket']:
+                    desc = f"```{Bracket().from_dict(to_show['bracket']).show_tree()}```"
+                embed.add_field(name="id", value=f"`{str(session_id)}`", inline=False)
+                embed.add_field(name="date", value=f"<t:{str(to_show['date'])}:F>", inline=False)
+                captain_mention=''
+                for team in to_show['teams']:
                     players_readable = []
-                    captain_mention = session['teams'][team]['roster'][0]
-                    for player in session['teams'][team]['roster']:
+                    for player in to_show['teams'][team]['roster']:
                         guild_member = ctx.guild.get_member(player)
-                        if guild_member:
-                            mention = guild_member.mention
-                            if player == session['teams'][team]['captain']:
-                                captain_mention = guild_member.mention
-                        else:
-                            mention = player
+                        if player == to_show['teams'][team]['captain']:
+                            captain_mention = guild_member.mention if guild_member else player
+                        mention = guild_member.mention if guild_member else player                       
                         players_readable.append(mention)
                         
                     field_value = f"{' '.join(players_readable)}\ncaptain: {captain_mention}"
-                    embed.add_field(name=session['teams'][team]['name'], value=field_value, inline=True)
-                if session['match_queue']:
+                    embed.add_field(name=to_show['teams'][team]['name'], value=field_value, inline=True)
+                if 'match_queue' in to_show and to_show['match_queue']:
                     embed.add_field(name="current matchups", value="\n".join(f"{t1} vs. {t2}" for t1, t2 in session['match_queue']), inline=False)
                 
                 embed.description = desc
                 embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
                 embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon)
+                print("getting file")
+                #file_to_send = await self._get_bracket_as_file(ctx.guild)
+                print("got file")
                 await ctx.send(embeds=[embed])
                 return
             await ctx.send("no session to show")
@@ -236,15 +248,58 @@ class SignUp(commands.Cog):
             await ctx.send(msg)
         else:
             await ctx.send("No teams to show")
+    
+    @session.command(name='makethreads', aliases=['createthreads'])
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def makethreads(self, ctx):
+        guild_group = self.config.guild(ctx.guild)
+        async with guild_group.session() as session:
+            channel = ctx.guild.get_channel(session['threadchannel'])
+            await ctx.send(channel.mention)
+
+            # thread = await channel.create_thread(name=thread_name, auto_archive_duration=60)
+
+            # # Add members to the thread
+            # for member_id in member_ids:
+            #     member = ctx.guild.get_member(member_id)
+            #     if member:
+            #         await thread.add_user(member)
+            #     else:
+            #         await ctx.send(f"Member with ID {member_id} not found.")
+
+            # await ctx.send(f"Thread '{thread_name}' created and members added successfully.")
+            #         #get current matches
+            #         #find players in those matches
+            #         #add each set of players to new thread in channel
+            #         pass
+
+    @signupset.command(name='threadchannel')
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def _setdefaultthreadchannel(self, ctx, channel):
+        channel_mention = re.search(r'<#[0-9]*>', re.sub(r'[^<>#0-9\s]', '', channel.strip())).group()
+        print(channel_mention)
+        channel = self._getchannel(ctx.guild, channel_mention)
+        if not channel:
+            await ctx.send("invalid channel")
+            return
+        guild_group = self.config.guild(ctx.guild)
+        await guild_group.default_thread_channel.set(channel.id)
+        await ctx.send(f"set default channel as {channel_mention}")
 
     @signupset.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def toggleopen(self, ctx: commands.Context):
         """Toggles whether signups are open on the server"""
-        new_value = not await self.config.guild(ctx.guild).signups_open()
-        await self.config.guild(ctx.guild).signups_open.set(new_value)
-        await ctx.send(f"Signups open status: {new_value}")
+        result = await self._toggleopen(ctx.guild)
+        await ctx.send(f"Signups are now: `{'Open' if result else 'Closed'}`")
+
+    async def _toggleopen(self, guild):
+        new_value = not await self.config.guild(guild).signups_open()
+        await self.config.guild(guild).signups_open.set(new_value)
+        return new_value
 
     @config.command(name='clear')
     @commands.guild_only()
@@ -311,12 +366,22 @@ class SignUp(commands.Cog):
 
     @staticmethod
     def _getmember(guild, mention: str):
-        id = int(mention[2:-1])
+        member_id = int(mention[2:-1])
 
         try: 
-            member = guild.get_member(id)
+            member = guild.get_member(member_id)
             if not member.bot :
                 return member
+        except:
+            return None
+    
+    @staticmethod
+    def _getchannel(guild, mention: str):
+        channel_id = int(mention[2:-1])
+
+        try:
+            channel = guild.get_channel(channel_id)
+            return channel
         except:
             return None
     
@@ -486,6 +551,8 @@ class SignUp(commands.Cog):
     async def _place_teams(self, guild):
         guild_group = self.config.guild(guild)
         async with guild_group.session() as session, guild_group.teams() as teams:
+            if not session['bracket']:
+                return
             bracket = Bracket().from_dict(session['bracket'])
             competitors = deque(sorted(session['teams'].keys(), key=lambda x: teams[x]['points'] if x in teams else 0))
 
@@ -519,6 +586,35 @@ class SignUp(commands.Cog):
             
             session['bracket'] = dict(bracket)
         await self._queue_matches(guild)
+
+    async def _session_is_full(self, guild):
+        guild_group = self.config.guild(guild)
+        max_teams = await guild_group.bracket_size()
+        async with guild_group.session() as session:
+            if len(session['teams']) >= max_teams:
+                return True
+        return False
+    
+    async def get_bracket_as_file(self, ctx):
+        print("trying to get file")
+        return await self._get_bracket_as_file(ctx.guild)
+    
+    async def _get_bracket_as_file(self, guild):
+        print("entered function")
+        guild_group = self.config.guild(guild)
+        print("got guild group")
+        async with guild_group.session() as session:
+            print("getting bracket")
+            text = Bracket().from_dict(session['bracket']).show_tree()
+            print("bracket text:" + text)
+            file = io.BytesIO(text.encode('utf-8'))
+            print("created file")
+            discord_file = discord.File(file, filename='bracket.txt')
+            print("created discord file")
+            file.close()
+
+            print("returning file")
+            return discord_file
 
     @app_commands.command()
     @app_commands.guild_only()
@@ -573,3 +669,7 @@ class SignUp(commands.Cog):
             }
             
         await interaction.response.send_message(f"Signed up `{team_name}` with players {' '.join(players)}", ephemeral=False)
+
+        if await self._session_is_full(interaction.guild):
+            await self._toggleopen(interaction.guild)
+            await interaction.followup.send("Last team registered! Signups now CLOSED")

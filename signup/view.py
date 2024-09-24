@@ -15,7 +15,7 @@ BUTTONS = [
 
 class TournamentView(discord.ui.View):
     def __init__(self, cog: commands.Cog) -> None:
-        super().__init__(timeout=60 * 5)
+        super().__init__(timeout=None)
         self.ctx: commands.Context = None
         self.cog: commands.Cog = cog
 
@@ -122,5 +122,6 @@ class TournamentView(discord.ui.View):
             return
         await interaction.response.edit_message(
             embed=await self.cog.get_embed(self.ctx, self._selected),
+            attachments=await self.cog.get_bracket_as_file(self.ctx),
             view=self
         )
