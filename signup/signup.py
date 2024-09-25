@@ -34,7 +34,7 @@ class SignUp(commands.Cog):
             "sender_is_captain": True,
             "session": {},
             "teams": {},
-            "signup_channel": {},
+            "default_signup_channel": None,
             "default_thread_channel": None,
             "sessions": {},
         }
@@ -287,6 +287,20 @@ class SignUp(commands.Cog):
         guild_group = self.config.guild(ctx.guild)
         await guild_group.default_thread_channel.set(channel.id)
         await ctx.send(f"set default channel as {channel_mention}")
+    
+    @signupset.command(name='signupchannel')
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def _setdefaultsignupchannel(self, ctx, channel):
+        channel_mention = re.search(r'<#[0-9]*>', re.sub(r'[^<>#0-9\s]', '', channel.strip())).group()
+        print(channel_mention)
+        channel = self._getchannel(ctx.guild, channel_mention)
+        if not channel:
+            await ctx.send("invalid channel")
+            return
+        guild_group = self.config.guild(ctx.guild)
+        await guild_group.default_signup_channel.set(channel.id)
+        await ctx.send(f"set signup channel as {channel_mention}")
 
     @signupset.command()
     @commands.guild_only()
@@ -624,6 +638,9 @@ class SignUp(commands.Cog):
         guild_group = self.config.guild(interaction.guild)
         if not await guild_group.signups_open():
             await interaction.response.send_message("Signups are currently closed.", ephemeral=True)
+            return
+        if interaction.channel.id != await guild_group.default_signup_channel():
+            await interaction.response.send_message("Wrong channel", ephemeral=True)
             return
 
         team_name = re.sub(r'[^a-zA-Z0-9@.!#$%^&_+\s]', '', team_name)
