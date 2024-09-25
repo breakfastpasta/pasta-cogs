@@ -44,7 +44,9 @@ class TournamentView(discord.ui.View):
         for button in current_buttons:
             self.add_item(button)
         self._message: discord.Message = await self.ctx.send(
-            embed=await self.cog.get_embed(self.ctx, self._selected), view=self
+            embed=await self.cog.get_embed(self.ctx, self._selected),
+            file=await self.cog.get_bracket_as_file(self.ctx),
+            view=self,
         )
         #self.cog.views[self._message] = self
         return self._message
@@ -79,8 +81,10 @@ class TournamentView(discord.ui.View):
             self.SELECTIONS.append(selection)
     
     async def _callback(self, interaction: discord.Interaction) -> None:
+        bracket_updated = False
         if interaction.data["custom_id"] == "confirm_button":
             await self.cog.update_bracket(interaction.guild, self._selected)
+            bracket_updated = True
             matchups = await self.cog.get_matchups(interaction.guild)
             self._refresh_selections(matchups)
             current_selections = self.SELECTIONS
@@ -94,6 +98,7 @@ class TournamentView(discord.ui.View):
             self._selected.clear()
         if interaction.data["custom_id"] == "undo_button":
             await self.cog.revert_bracket(interaction.guild)
+            bracket_updated = True
             self._selected.clear()
             self._refresh_selections(await self.cog.get_matchups(interaction.guild))
             current_selections = self.SELECTIONS
@@ -120,8 +125,14 @@ class TournamentView(discord.ui.View):
             await self.on_timeout()
             self.stop()
             return
+        if bracket_updated:
+            await interaction.response.edit_message(
+                embed=await self.cog.get_embed(self.ctx, self._selected),
+                attachments=[await self.cog.get_bracket_as_file(self.ctx)],
+                view=self 
+            )
+            return
         await interaction.response.edit_message(
             embed=await self.cog.get_embed(self.ctx, self._selected),
-            attachments=await self.cog.get_bracket_as_file(self.ctx),
             view=self
         )

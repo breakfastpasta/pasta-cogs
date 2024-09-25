@@ -122,41 +122,41 @@ class SignUp(commands.Cog):
         async with guild_group.session() as session, guild_group.sessions() as sessions:
             
             to_show = session
+            if not to_show:
+                await ctx.send("No session to show. Create one with `[p]signupset session new`")
+                return
+
             if session_id and not session_id == session['id']:
                 to_show = sessions[session_id]
             else:
                 session_id = session['id']
+            
                 
-            if to_show:
-                desc = "No bracket"
-                if to_show['bracket']:
-                    desc = f"```{Bracket().from_dict(to_show['bracket']).show_tree()}```"
-                embed.add_field(name="id", value=f"`{str(session_id)}`", inline=False)
-                embed.add_field(name="date", value=f"<t:{str(to_show['date'])}:F>", inline=False)
-                captain_mention=''
-                for team in to_show['teams']:
-                    players_readable = []
-                    for player in to_show['teams'][team]['roster']:
-                        guild_member = ctx.guild.get_member(player)
-                        if player == to_show['teams'][team]['captain']:
-                            captain_mention = guild_member.mention if guild_member else player
-                        mention = guild_member.mention if guild_member else player                       
-                        players_readable.append(mention)
-                        
-                    field_value = f"{' '.join(players_readable)}\ncaptain: {captain_mention}"
-                    embed.add_field(name=to_show['teams'][team]['name'], value=field_value, inline=True)
-                if 'match_queue' in to_show and to_show['match_queue']:
-                    embed.add_field(name="current matchups", value="\n".join(f"{t1} vs. {t2}" for t1, t2 in session['match_queue']), inline=False)
-                
-                embed.description = desc
-                embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-                embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon)
-                print("getting file")
-                #file_to_send = await self._get_bracket_as_file(ctx.guild)
-                print("got file")
-                await ctx.send(embeds=[embed])
-                return
-            await ctx.send("no session to show")
+            desc = "No bracket"
+            if to_show['bracket']:
+                desc = f"```{Bracket().from_dict(to_show['bracket']).show_tree()}```"
+            embed.add_field(name="id", value=f"`{str(session_id)}`", inline=False)
+            embed.add_field(name="date", value=f"<t:{str(to_show['date'])}:F>", inline=False)
+            captain_mention=''
+            for team in to_show['teams']:
+                players_readable = []
+                for player in to_show['teams'][team]['roster']:
+                    guild_member = ctx.guild.get_member(player)
+                    if player == to_show['teams'][team]['captain']:
+                        captain_mention = guild_member.mention if guild_member else player
+                    mention = guild_member.mention if guild_member else player                       
+                    players_readable.append(mention)
+                    
+                field_value = f"{' '.join(players_readable)}\ncaptain: {captain_mention}"
+                embed.add_field(name=to_show['teams'][team]['name'], value=field_value, inline=True)
+            if 'match_queue' in to_show and to_show['match_queue']:
+                embed.add_field(name="current matchups", value="\n".join(f"{t1} vs. {t2}" for t1, t2 in session['match_queue']), inline=False)
+            
+            #embed.description = desc
+            embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+            embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon)
+        #file_to_send = await self._get_bracket_as_file(ctx.guild)
+        await ctx.send(embeds=[embed], file=await self._get_bracket_as_file(ctx.guild))
     
     @session.command(name='view')
     @commands.guild_only()
@@ -197,6 +197,7 @@ class SignUp(commands.Cog):
         """Deletes the current bracket"""
         async with self.config.guild(ctx.guild).session() as session:
             session['bracket'].clear()
+            session['match_queue'].clear()
             await ctx.send('bracket removed')
 
     @session.command(name='placeteams')
@@ -421,7 +422,7 @@ class SignUp(commands.Cog):
                         field_value = "*Undecided*"
                     embed.add_field(name=f"`{t1.val} vs. {t2.val}`", value=field_value, inline=True)
                 bracket_codeblock = bracket.show_tree()
-                embed.description = f"```{bracket_codeblock}```"
+                #embed.description = f"```{bracket_codeblock}```"
         
         
         #embed.set_thumbnail(url="https://example.com/example.png")
@@ -609,6 +610,12 @@ class SignUp(commands.Cog):
                 return True
         return False
     
+    @signupset.command(name='testcommand')
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def _testcommand(self, ctx):
+        await ctx.send(file=await self._get_bracket_as_file(ctx.guild))
+    
     async def get_bracket_as_file(self, ctx):
         print("trying to get file")
         return await self._get_bracket_as_file(ctx.guild)
@@ -650,6 +657,8 @@ class SignUp(commands.Cog):
 
         async def checkinput():
             msg = ""
+            if len(team_name) > 48:
+                msg += f"Team name too long. Max length is 48 characters"
             if len(players) != team_size:
                 msg += f"Incorrect number of players. Please enter {team_size} player mentions.\n"
             if len(players) != len(set(players)):
