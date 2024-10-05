@@ -22,7 +22,6 @@ class Anime(commands.Cog):
     async def airingtoday(self, ctx):
         """All anime airing today"""
         midnights = self._get_midnights()
-        print(midnights)
         query = '''
         query AiringSchedules($airingAtGreater: Int, $airingAtLesser: Int, $sort: [AiringSort]) {
             Page {
