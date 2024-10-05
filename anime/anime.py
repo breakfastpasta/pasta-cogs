@@ -115,14 +115,12 @@ class Anime(commands.Cog):
         
 
     @anime.command(name="top")
-    async def top(self, ctx, number: int=10):
+    async def top(self, ctx, page_num: int=1):
         """Show today's top trending anime"""
-        if number > 25:
-            number = 25
         # Here we define our query as a multi-line string
         query = '''
-        query Page($status: MediaStatus, $type: MediaType, $sort: [MediaSort], $perPage: Int) {
-            Page(perPage: $perPage) {
+        query Page($status: MediaStatus, $type: MediaType, $sort: [MediaSort], $page: Int, $perPage: Int) {
+            Page(page: $page, perPage: $perPage) {
                 media(status: $status, type: $type, sort: $sort) {
                     id
                     title {
@@ -141,7 +139,8 @@ class Anime(commands.Cog):
             "status": "RELEASING",
             "sort": "TRENDING_DESC",
             "type": "ANIME",
-            "perPage": number,
+            "page": page_num,
+            "perPage": 10,
         }
 
         url = 'https://graphql.anilist.co'
@@ -151,16 +150,17 @@ class Anime(commands.Cog):
 
         if response.ok:
             data = response.json()
-            msg = ""
-            i = 1
+            msg = "**Today's top trending anime:**\n"
+            i = (page_num - 1) * 10 + 1
             for media in data['data']['Page']['media']:
                 english_title = media['title']['english']
                 trending = media['trending']
                 link = media['siteUrl']
                 msg += f"`{i:>2} {f'({trending})':^5}`: [{english_title if english_title else media['title']['romaji']}]({link})\n"
                 i += 1
+            msg += f"\nPage: {page_num}"
         
-        await ctx.send(msg, suppress_embeds=True)
+            await ctx.send(msg, suppress_embeds=True)
     
     @staticmethod
     def _html_to_discord(text):
