@@ -3,10 +3,12 @@ import requests
 import datetime
 import re
 
+from collections import deque
+
 from redbot.core import commands
 
 class Anime(commands.Cog):
-    """My custom cog"""
+    """Find anime poppin' throughout the web"""
 
     def __init__(self, bot):
         self.bot = bot
@@ -15,6 +17,77 @@ class Anime(commands.Cog):
     async def anime(self, ctx):
         """Find anime"""
         pass
+
+    @anime.command(name="today", aliases=["now"])
+    async def airingtoday(self, ctx):
+        """All anime airing today"""
+        midnights = self._get_midnights()
+        print(midnights)
+        query = '''
+        query AiringSchedules($airingAtGreater: Int, $airingAtLesser: Int, $sort: [AiringSort]) {
+            Page {
+                airingSchedules(airingAt_greater: $airingAtGreater, airingAt_lesser: $airingAtLesser, sort: $sort) {
+                    media {
+                        title {
+                            english
+                            romaji
+                        }
+                        id
+                        trending
+                    }
+                    airingAt
+                    timeUntilAiring
+                    episode
+                }
+            }
+        }
+        '''
+
+        variables = {
+            "airingAtGreater": midnights[0],
+            "airingAtLesser": midnights[1],
+            "sort": "TIME"
+        }
+
+        url = 'https://graphql.anilist.co'
+
+        response = requests.post(url, json={'query': query, 'variables': variables})
+
+        if response.ok:
+            data = response.json()
+
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            day_month = now.strftime("%A, %B %d")
+
+            embeds = [
+                discord.Embed(
+                    title=f"Airing schedule for {day_month}",
+                    color=await ctx.embed_color(),
+                )
+            ]
+
+            fields = deque()
+            for e in data['data']['Page']['airingSchedules']:
+                title = e['media']['title']['english'] if e['media']['title']['english'] else e['media']['title']['romaji']
+                ep = e['episode']
+                time = e['airingAt']
+                fields.append({'name': title, 'value': f"Episode {ep}\n<t:{time}:R>"})
+            
+            while fields:
+                embed = discord.Embed(title="", color=await ctx.embed_color())
+                for _ in range(25):
+                    if fields:
+                        f = fields.popleft()
+                        embed.add_field(name=f['name'], value=f['value'])
+                    else:
+                        break
+                embeds.append(embed)
+
+
+            
+            await ctx.send(embeds=embeds)
+
+
 
     @anime.command(name="search", aliases=["s","se"])
     async def search(self, ctx, *args):
@@ -150,18 +223,34 @@ class Anime(commands.Cog):
 
         if response.ok:
             data = response.json()
-            msg = "**Today's top trending anime:**\n"
+
+            embed: discord.Embed = discord.Embed(
+                title="Today's top trending",
+                color=await ctx.embed_color(),
+            )
+
             i = (page_num - 1) * 10 + 1
             for media in data['data']['Page']['media']:
-                english_title = media['title']['english']
+                title = media['title']['english'] if media['title']['english'] else media['title']['romaji']
                 trending = media['trending']
                 link = media['siteUrl']
-                msg += f"`{i:>2} {f'({trending})':^5}`: [{english_title if english_title else media['title']['romaji']}]({link})\n"
+
+                embed.add_field(name=f"{i}. {title}", value=f"`Score: {trending}` [AL]({link})", inline=False)
                 i += 1
-            msg += f"\nPage: {page_num}"
+            embed.set_footer(text=f"Page {page_num}")
         
-            await ctx.send(msg, suppress_embeds=True)
+            await ctx.send(embed=embed)
     
+    @staticmethod
+    def _get_midnights():
+        now = datetime.datetime.now()
+        last_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)   
+        next_midnight = last_midnight + datetime.timedelta(days=1)
+        last_midnight_epoch = int(last_midnight.timestamp())
+        next_midnight_epoch = int(next_midnight.timestamp())
+
+        return last_midnight_epoch, next_midnight_epoch
+
     @staticmethod
     def _html_to_discord(text):
         formatting_map = {
