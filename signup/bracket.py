@@ -89,6 +89,22 @@ class Bracket:
         if not node.parent:
             return 0
         return self._get_node_depth(node.parent) + 1
+    
+    def get_competitor_points(self, name, winpoints=1, losspoints=0):
+        node = None
+        leaf_nodes = []
+        self._get_leaf_nodes(self.root, leaf_nodes)
+        for n in leaf_nodes:
+            if n.val == name:
+                node = n
+        if not node:
+            return
+        return self._get_node_points(node, winpoints, losspoints)
+
+    def _get_node_points(self, node, winpoints, losspoints):
+        if node.parent.val == node.val:
+            return winpoints + self._get_node_points(node.parent, winpoints, losspoints)
+        return losspoints
 
     def _count_leaves(self, node):
         if not node:
@@ -98,6 +114,22 @@ class Bracket:
         
         return self._count_leaves(node.left) + self._count_leaves(node.right)
     
+    def get_num_competitor_matches(self, name):
+        node = None
+        leaf_nodes = []
+        self._get_leaf_nodes(self.root, leaf_nodes)
+        for n in leaf_nodes:
+            if n.val == name:
+                node = n
+        if not node:
+            return
+        return self._get_num_node_games(node)
+
+    def _get_num_node_games(self, node):
+        if node.parent.val == node.val:
+            return 1 + self._get_num_node_games(node.parent)
+        return 1
+
     def _get_matchups(self, node):
         if not node:
             return []

@@ -147,7 +147,7 @@ class SignUp(commands.Cog):
                     mention = guild_member.mention if guild_member else player                       
                     players_readable.append(mention)
                     
-                field_value = f"{' '.join(players_readable)}\ncaptain: {captain_mention}"
+                field_value = f"points: {to_show['teams'][team]['points']}\ncaptain: {captain_mention}\n{' '.join(players_readable)}"
                 embed.add_field(name=to_show['teams'][team]['name'], value=field_value, inline=True)
             if 'match_queue' in to_show and to_show['match_queue']:
                 embed.add_field(name="current matchups", value="\n".join(f"{t1} vs. {t2}" for t1, t2 in session['match_queue']), inline=False)
@@ -254,26 +254,27 @@ class SignUp(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def makethreads(self, ctx):
+        msg = ""
         guild_group = self.config.guild(ctx.guild)
         async with guild_group.session() as session:
             channel = ctx.guild.get_channel(session['threadchannel'])
             await ctx.send(channel.mention)
 
-            # thread = await channel.create_thread(name=thread_name, auto_archive_duration=60)
+            for red, blue in session['match_queue']:
+                thread_name = f"{red} vs. {blue}"
+                thread = await channel.create_thread(name=thread_name, auto_archive_duration=60, invitable=False, reason="scrim match private thread")
 
-            # # Add members to the thread
-            # for member_id in member_ids:
-            #     member = ctx.guild.get_member(member_id)
-            #     if member:
-            #         await thread.add_user(member)
-            #     else:
-            #         await ctx.send(f"Member with ID {member_id} not found.")
+                member_ids = session['teams'][red]['roster'] + session['teams'][blue]['roster']
+                # Add members to the thread
+                for member_id in member_ids:
+                    member = ctx.guild.get_member(member_id)
+                    if member:
+                        await thread.add_user(member)
 
-            # await ctx.send(f"Thread '{thread_name}' created and members added successfully.")
-            #         #get current matches
-            #         #find players in those matches
-            #         #add each set of players to new thread in channel
-            #         pass
+                msg += f"Thread '{thread_name}' created and members added successfully.\n"
+        if msg:
+            await ctx.send(msg)
+
 
     @signupset.command(name='threadchannel')
     @commands.guild_only()
@@ -476,6 +477,13 @@ class SignUp(commands.Cog):
         async with guild_group.sessions() as sessions, guild_group.teams() as teams:
             pass
         await guild_group.session.set(None)
+    
+    async def _update_team_scores(self, guild):
+        guild_group = self.config.guild(guild)
+        async with guild_group.session() as session:
+            bracket = Bracket().from_dict(session['bracket'])
+            for team in session['teams']:
+                session['teams'][team]['points'] = bracket.get_competitor_points(team, winpoints=5, losspoints=2)
 
     async def _revert_bracket(self, guild):
         guild_group = self.config.guild(guild)
@@ -502,6 +510,8 @@ class SignUp(commands.Cog):
                 'teams': session['teams'],
                 'date': session['date'],
             }
+            bracket = Bracket().from_dict(session['bracket'])
+            winner = bracket.root.val
             for team in session['teams']:
                 if team not in teams:
                     teams[team] = {
@@ -520,8 +530,8 @@ class SignUp(commands.Cog):
                 teams[team]['players'] = list(players)
                 teams[team]['points'] += session['teams'][team]['points']
                 teams[team]['points_total'] += session['teams'][team]['points']
-                teams[team]['matches'] += 0
-                teams[team]['scrim_wins'] += 0
+                teams[team]['matches'] += bracket.get_num_competitor_matches(team)
+                teams[team]['scrim_wins'] += 1 if team == winner else 0
                 teams[team]['cup_wins'] += 0
             session.clear()
             
