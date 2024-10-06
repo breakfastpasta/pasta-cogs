@@ -7,6 +7,8 @@ from collections import deque
 
 from redbot.core import commands
 
+from .scrapers import GoGoAnime, HiAnime
+
 class Anime(commands.Cog):
     """Find anime poppin' throughout the web"""
 
@@ -55,7 +57,7 @@ class Anime(commands.Cog):
         if response.ok:
             data = response.json()
 
-            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            now = datetime.datetime.now()
             day_month = now.strftime("%A, %B %d")
 
             embeds = [
