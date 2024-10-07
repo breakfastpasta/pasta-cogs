@@ -36,6 +36,12 @@ class Anime(commands.Cog):
             'animecorner': AnimeCorner,
             'animetrending': AniTrendz
         }
+        color_map = {
+            'gogoanime': discord.Color.green(),
+            'hianime': discord.Color.dark_blue(),
+            'animecorner': discord.Color.yellow(),
+            'animetrending': discord.Color.orange()
+        }
 
         scrapers = []
         if site == 'all':
@@ -56,7 +62,7 @@ class Anime(commands.Cog):
             for scraper in scrapers:
                 embed: discord.Embed = discord.Embed(
                     title=scraper['name'].upper(),
-                    color=await ctx.embed_color()
+                    color=color_map[scraper['name']]
                 )
                 embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
                 results = await scraper['scraper'].get_popular()
