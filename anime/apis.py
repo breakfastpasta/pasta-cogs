@@ -25,13 +25,20 @@ def run_in_executor(func):
 class AniList:
     BASE_URL = 'https://graphql.anilist.co'
 
-    @classmethod
-    @run_in_executor
-    def airing_today(cls):
-        return cls._airing_today()
+    def __init__(self, proxy_url=None):
+        self._session = requests.Session()
+        self._proxy_url = proxy_url
+        if self._proxy_url:
+            self._session.proxies = {
+                'http': proxy_url,
+                'https': proxy_url,
+            }
 
-    @classmethod
-    def _airing_today(cls):
+    @run_in_executor
+    def airing_today(self):
+        return self._airing_today()
+
+    def _airing_today(self):
         midnights = get_midnights()
         query = '''
         query AiringSchedules($airingAtGreater: Int, $airingAtLesser: Int, $sort: [AiringSort]) {
@@ -59,7 +66,7 @@ class AniList:
             "sort": "TIME"
         }
 
-        response = requests.post(cls.BASE_URL, json={'query': query, 'variables': variables})
+        response = self._session.post(self.BASE_URL, json={'query': query, 'variables': variables})
 
         if response.ok:
             data = response.json()
@@ -78,13 +85,11 @@ class AniList:
             
             return retval
 
-    @classmethod
     @run_in_executor
-    def search(cls, search_query: str):
-        return cls._search(search_query)
+    def search(self, search_query: str):
+        return self._search(search_query)
 
-    @classmethod
-    def _search(cls, search_query: str):
+    def _search(self, search_query: str):
         query = '''
         query Media($search: String, $type: MediaType) {
             Media(search: $search, type: $type) {
@@ -133,7 +138,7 @@ class AniList:
             "type": "ANIME",
         }
 
-        response = requests.post(cls.BASE_URL, json={'query': query, 'variables': variables})
+        response = self._session.post(self.BASE_URL, json={'query': query, 'variables': variables})
 
         if response.ok:
             data = response.json()
@@ -155,13 +160,11 @@ class AniList:
 
             return retval
 
-    @classmethod
     @run_in_executor
-    def get_popular(cls, page_num: int=1):
-        return cls._get_popular(page_num)
+    def get_popular(self, page_num: int=1):
+        return self._get_popular(page_num)
     
-    @classmethod
-    def _get_popular(cls, page_num: int=1):
+    def _get_popular(self, page_num: int=1):
         """Show today's top trending anime"""
         # Here we define our query as a multi-line string
         query = '''
@@ -188,7 +191,7 @@ class AniList:
             "perPage": 10,
         }
 
-        response = requests.post(cls.BASE_URL, json={'query': query, 'variables': variables})
+        response = self._session.post(self.BASE_URL, json={'query': query, 'variables': variables})
 
         if response.ok:
             data = response.json()
@@ -218,14 +221,21 @@ class Plex:
 class MyAnimeList:
     BASE_URL = "https://api.jikan.moe/v4"
 
-    @classmethod
-    @run_in_executor
-    def get_popular(cls, n=25):
-        return cls._get_popular(n)
+    def __init__(self, proxy_url=None):
+        self._session = requests.Session()
+        self._proxy_url = proxy_url
+        if self._proxy_url:
+            self._session.proxies = {
+                'http': proxy_url,
+                'https': proxy_url,
+            }
 
-    @classmethod
-    def _get_popular(cls, n=25):
-        url = f"{cls.BASE_URL}/top/anime"
+    @run_in_executor
+    def get_popular(self, n=25):
+        return self._get_popular(n)
+
+    def _get_popular(self, n=25):
+        url = f"{self.BASE_URL}/top/anime"
 
         params = {
             'type': "tv", 
@@ -235,7 +245,7 @@ class MyAnimeList:
         }
         headers = {'Content-Type': 'application/json'}
 
-        response = requests.get(url, params=params, headers=headers).json()
+        response = self._session.get(url, params=params, headers=headers).json()
 
         retval = []
         for item in response['data']:

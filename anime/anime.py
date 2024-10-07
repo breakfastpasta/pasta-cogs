@@ -7,14 +7,35 @@ from collections import deque
 from typing import Literal
 
 from redbot.core import commands
+from redbot.core import Config
 
 from .scrapers import GoGoAnime, HiAnime, AnimeCorner, AniTrendz
 from .apis import MyAnimeList, AniList
+from .view import AnimeView
+
+UNIQUE_ID=0x67035FFA
 
 class Anime(commands.Cog):
-    """Find anime poppin' throughout the web"""
+    """Find anime poppin' throughout the web!!"""
+    
+    color_map = {
+        'gogoanime': discord.Color.green(),
+        'hianime': discord.Color.dark_blue(),
+        'animecorner': discord.Color.yellow(),
+        'anitrendz': discord.Color.orange(),
+        'myanimelist': discord.Color.blue(),
+        'anilist': discord.Color.teal(),
+    }
 
     def __init__(self, bot):
+        self.config = Config.get_conf(self, identifier=UNIQUE_ID, force_registration=True)
+        default_global = {
+            "proxy_url": None,
+        }
+        self.config.register_global(**default_global)
+
+        self._result_cache = {}
+
         self.bot = bot
 
     @commands.group(name="anime", autohelp=True, aliases=["ani"])
@@ -22,25 +43,41 @@ class Anime(commands.Cog):
         """Find anime"""
         pass
 
+    @commands.group(name="animeset", autohelp=True)
+    @commands.admin()
+    async def animeset(self, ctx):
+        """Change settings"""
+        pass
+
+    @animeset.command(name="proxy")
+    async def _set_proxy_url(self, ctx, proxy_url: str):
+        proxy_regex = r"^(?P<protocol>https?|socks[45]):\/\/(?:((?P<username>[^:@]+)(?::(?P<password>[^:@]+))?)@)?(?P<host>(?:[a-zA-Z\d.-]+|\[[a-fA-F\d:]+\])):(?P<port>\d{1,5})$"
+        if proxy_url and not re.match(proxy_regex, proxy_url):
+            await ctx.send("invalid proxy url")
+            return
+        
+        await self.config.proxy_url.set(proxy_url)
+        await ctx.send('proxy url now set')
+
     @anime.command(name="scrape")
     async def scrape(
         self, 
         ctx, 
-        site: Literal['gogoanime', 'hianime', 'animecorner', 'animetrending', 'all']='all', 
+        site: Literal['gogoanime', 'hianime', 'animecorner', 'anitrendz', 'all']='all', 
         proxy_url=None
         ):
-        """Scrapes sources across the web for popular anime rankings"""
+        """Scrape a specific source"""
         scraper_map = {
             'gogoanime': GoGoAnime,
             'hianime': HiAnime,
             'animecorner': AnimeCorner,
-            'animetrending': AniTrendz
+            'anitrendz': AniTrendz
         }
         color_map = {
             'gogoanime': discord.Color.green(),
             'hianime': discord.Color.dark_blue(),
             'animecorner': discord.Color.yellow(),
-            'animetrending': discord.Color.orange()
+            'anitrendz': discord.Color.orange()
         }
 
         scrapers = []
@@ -78,7 +115,7 @@ class Anime(commands.Cog):
     async def airingtoday(self, ctx):
         """All anime airing today"""
 
-        result = await AniList.airing_today()
+        result = await AniList().airing_today()
 
         now = datetime.datetime.now()
         day_month = now.strftime("%A, %B %d")
@@ -114,7 +151,7 @@ class Anime(commands.Cog):
             await ctx.send("no query")
             return
         
-        result = await AniList.search(search_query)
+        result = await AniList().search(search_query)
         if not result:
             return
 
@@ -136,22 +173,42 @@ class Anime(commands.Cog):
         embed.add_field(name="Tags", value=f"{', '.join(result['tags'])}", inline=False)
         
         await ctx.send(embed=embed)
-
+    
     @anime.command(name="top")
-    async def top(self, ctx, page_num: int=1):
-        """Show today's top trending anime"""
-        
-        result = await AniList.get_popular(page_num)
+    async def top_view(self, ctx):
+        """See trending anime from all around the web"""
+        async with ctx.typing():
+            trending = await self._get_all_trending()
+        await AnimeView(cog=self).start(ctx, sources=[k for k in trending])
 
+    async def _get_all_trending(self):
+        proxy_url = await self.config.proxy_url()
+
+        sources = [AniList, MyAnimeList, GoGoAnime, HiAnime, AnimeCorner, AniTrendz]
+        
+        trending = {}
+        for source in sources:
+            trend = await source(proxy_url=proxy_url).get_popular()
+            trending[source.__name__.lower()] = trend[:10]
+
+        self._result_cache = trending
+
+        return trending
+
+    async def get_embed(
+        self, ctx: commands.Context, source: str
+    ) -> discord.Embed:
         embed: discord.Embed = discord.Embed(
-            title="Today's top trending",
-            color=await ctx.embed_color(),
+            title=source.upper(),
+            color=self.color_map[source],
         )
 
-        i = (page_num - 1) * 10 + 1
-        for s in result:
-            embed.add_field(name=f"{i}. {s['name']}", value=f"`Score: {s['score']}`", inline=False)
-            i += 1
-        embed.set_footer(text=f"Page {page_num}")
-    
-        await ctx.send(embed=embed)
+        if not self._result_cache:
+            await ctx.send("no results cached, something went wrong")
+
+        if source in self._result_cache:
+            for item in self._result_cache[source]:
+                embed.add_field(name=item['name'], value=f"`Score: {item['score']}`", inline=False)
+        
+        embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+        return embed
