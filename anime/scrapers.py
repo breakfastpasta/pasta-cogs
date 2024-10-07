@@ -2,11 +2,25 @@ import requests
 import re
 import json
 import asyncio
+import inspect
 
 from abc import ABC, abstractmethod
 from typing import Literal
+from functools import wraps, partial
 
 from bs4 import BeautifulSoup
+
+def run_in_executor(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        if inspect.ismethod(func):
+            context, *args = args
+            bound_func = partial(func, context)
+        else:
+            bound_func = func
+        return await loop.run_in_executor(None, bound_func, *args, **kwargs)
+    return wrapper
 
 class AnimeScraper(ABC):
     def __init__(self, proxy_url=None):
@@ -33,22 +47,21 @@ class AnimeScraper(ABC):
             'http': value,
             'https': value,
         }
+    
+    @run_in_executor
+    def get_popular(self, period: Literal['day', 'week', 'month', 'season', 'anticipated']=None, page=None) -> [dict()]:
+        return self._get_popular(period, page)
 
     @abstractmethod
-    def get_popular(self, period, page) -> [dict()]:
+    def _get_popular(self, period, page) -> [dict()]:
         pass
-
-    async def async_get_popular(self, period, page) -> [dict()]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.get_popular, period, page)
 
 class GoGoAnime(AnimeScraper):
     BASE_URL = "https://ajax.gogocdn.net/ajax"
 
-    async def async_get_popular(self, period=None, page=1):
-        return await super().async_get_popular(period, page)
-
-    def get_popular(self, period, page):
+    def _get_popular(self, period, page):
+        period = None
+        page = 1 if not page else page
         url = f"{self.BASE_URL}/page-recent-release-ongoing.html?page={str(page)}"
 
         response = self.session.get(url)
@@ -77,10 +90,9 @@ class GoGoAnime(AnimeScraper):
 class HiAnime(AnimeScraper):
     BASE_URL = "https://hianime.to"
 
-    async def async_get_popular(self, period: Literal["day", "week", "month"]="day", page=None):
-        return await super().async_get_popular(period, page)
-
-    def get_popular(self, period: Literal["day", "week", "month"]="day", page=None):
+    def _get_popular(self, period, page):
+        period = 'day' if not period or period not in ['day', 'week', 'month'] else period
+        page = None
         url = f"{self.BASE_URL}/top-airing"
 
         response = self.session.get(url)
@@ -106,10 +118,9 @@ class HiAnime(AnimeScraper):
 class AnimeCorner(AnimeScraper):
     BASE_URL = "https://animecorner.me/category/anime-corner/rankings"
 
-    async def async_get_popular(self, period: Literal["week", "season", "anticipated"]="week", page=None):
-        return await super().async_get_popular(period, page)
-
-    def get_popular(self, period: Literal["week", "season", "anticipated"]="week", page=None):
+    def _get_popular(self, period, page):
+        period = 'week' if not period or period not in ["week", "season", "anticipated"] else period
+        page = None
         subpath = f"/anime-of-the-{'season' if period == 'anticipated' else period}"
         url = f"{self.BASE_URL}{subpath}"
 
@@ -148,10 +159,7 @@ class AnimeCorner(AnimeScraper):
 class AniTrendz(AnimeScraper):
     BASE_URL = "https://www.anitrendz.com/charts"
 
-    async def async_get_popular(self, period=None, page=None):
-        return await super().async_get_popular(period, page)
-
-    def get_popular(self, period=None, page=None):
+    def _get_popular(self, period, page):
         url = f"{self.BASE_URL}/top-anime"
 
         response = self.session.get(url)

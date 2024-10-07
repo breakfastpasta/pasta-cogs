@@ -2,16 +2,35 @@ import requests
 import datetime
 import re
 import pprint
+import asyncio
+import inspect
 
 from collections import deque
+from functools import wraps, partial
 
 from .utils import get_midnights, html_to_discord
+
+def run_in_executor(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        if inspect.ismethod(func):
+            context, *args = args
+            bound_func = partial(func, context)
+        else:
+            bound_func = func
+        return await loop.run_in_executor(None, bound_func, *args, **kwargs)
 
 class AniList:
     BASE_URL = 'https://graphql.anilist.co'
 
     @classmethod
-    def airingtoday(cls):
+    @run_in_executor
+    def airing_today(cls):
+        return cls._airing_today()
+
+    @classmethod
+    def _airing_today(cls):
         midnights = get_midnights()
         query = '''
         query AiringSchedules($airingAtGreater: Int, $airingAtLesser: Int, $sort: [AiringSort]) {
@@ -59,7 +78,12 @@ class AniList:
             return retval
 
     @classmethod
+    @run_in_executor
     def search(cls, search_query: str):
+        return cls._search(search_query)
+
+    @classmethod
+    def _search(cls, search_query: str):
         query = '''
         query Media($search: String, $type: MediaType) {
             Media(search: $search, type: $type) {
@@ -131,7 +155,12 @@ class AniList:
             return retval
 
     @classmethod
+    @run_in_executor
     def get_popular(cls, page_num: int=1):
+        return cls._get_popular(page_num)
+    
+    @classmethod
+    def _get_popular(cls, page_num: int=1):
         """Show today's top trending anime"""
         # Here we define our query as a multi-line string
         query = '''
@@ -189,7 +218,12 @@ class MyAnimeList:
     BASE_URL = "https://api.jikan.moe/v4"
 
     @classmethod
+    @run_in_executor
     def get_popular(cls, n=25):
+        return cls._get_popular(n)
+
+    @classmethod
+    def _get_popular(cls, n=25):
         url = f"{cls.BASE_URL}/top/anime"
 
         params = {

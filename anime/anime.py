@@ -59,7 +59,7 @@ class Anime(commands.Cog):
                     color=await ctx.embed_color()
                 )
                 embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-                results = await scraper['scraper'].async_get_popular()
+                results = await scraper['scraper'].get_popular()
                 if len(results) > 25:
                     results = results[:25]
                 for result in results:
@@ -72,7 +72,7 @@ class Anime(commands.Cog):
     async def airingtoday(self, ctx):
         """All anime airing today"""
 
-        result = AniList.airingtoday()
+        result = await AniList.airing_today()
 
         now = datetime.datetime.now()
         day_month = now.strftime("%A, %B %d")
@@ -108,7 +108,7 @@ class Anime(commands.Cog):
             await ctx.send("no query")
             return
         
-        result = AniList.search(search_query)
+        result = await AniList.search(search_query)
         if not result:
             return
 
@@ -135,7 +135,7 @@ class Anime(commands.Cog):
     async def top(self, ctx, page_num: int=1):
         """Show today's top trending anime"""
         
-        result = AniList.get_popular(page_num)
+        result = await AniList.get_popular(page_num)
 
         embed: discord.Embed = discord.Embed(
             title="Today's top trending",
