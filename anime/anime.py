@@ -50,19 +50,21 @@ class Anime(commands.Cog):
                 'scraper': scraper_map[site](proxy_url=proxy_url)
             })
 
-        embeds = []
-        for scraper in scrapers:
-            embed: discord.Embed = discord.Embed(
-                title=scraper['name'].upper(),
-                color=await ctx.embed_color()
-            )
-            embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-            results = scraper['scraper'].get_popular()
-            if len(results) > 25:
-                results = results[:25]
-            for result in results:
-                embed.add_field(name=result['name'], value=f"`Score: {result['score']}`", inline=False)
-            embeds.append(embed)
+        await ctx.defer()
+        async with ctx.typing():
+            embeds = []
+            for scraper in scrapers:
+                embed: discord.Embed = discord.Embed(
+                    title=scraper['name'].upper(),
+                    color=await ctx.embed_color()
+                )
+                embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+                results = await scraper['scraper'].async_get_popular()
+                if len(results) > 25:
+                    results = results[:25]
+                for result in results:
+                    embed.add_field(name=result['name'], value=f"`Score: {result['score']}`", inline=False)
+                embeds.append(embed)
         
         await ctx.send(embeds=embeds)
 
@@ -147,4 +149,3 @@ class Anime(commands.Cog):
         embed.set_footer(text=f"Page {page_num}")
     
         await ctx.send(embed=embed)
-        
