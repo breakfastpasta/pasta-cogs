@@ -20,6 +20,7 @@ def run_in_executor(func):
         else:
             bound_func = func
         return await loop.run_in_executor(None, bound_func, *args, **kwargs)
+    return wrapper
 
 class AniList:
     BASE_URL = 'https://graphql.anilist.co'
