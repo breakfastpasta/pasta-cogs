@@ -119,7 +119,7 @@ class AnimeCorner(AnimeScraper):
     BASE_URL = "https://animecorner.me/category/anime-corner/rankings"
 
     def _get_popular(self, period, page):
-        period = 'week' if not period or period not in ["week", "season", "anticipated"] else period
+        period = 'week' if not period or period not in ["week", "season", "year", "anticipated"] else period
         page = None
         subpath = f"/anime-of-the-{'season' if period == 'anticipated' else period}"
         url = f"{self.BASE_URL}{subpath}"

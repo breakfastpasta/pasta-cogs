@@ -55,7 +55,7 @@ class AnimeView(discord.ui.View):
         for button in current_buttons:
             self.add_item(button)
         self._message: discord.Message = await self.ctx.send(
-            embed=await self.cog.get_embed(self.ctx, self._page),
+            embeds=await self.cog.get_embeds(self.ctx, self._page),
             view=self,
         )
         #self.cog.views[self._message] = self
@@ -82,6 +82,6 @@ class AnimeView(discord.ui.View):
             self._page = interaction.data['values'][0]
 
         await interaction.response.edit_message(
-            embed=await self.cog.get_embed(self.ctx, self._page),
+            embeds=await self.cog.get_embeds(self.ctx, self._page),
             view=self
         )

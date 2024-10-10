@@ -2,6 +2,7 @@ import discord
 import requests
 import datetime
 import re
+import asyncio
 
 from collections import deque
 from typing import Literal
@@ -63,8 +64,8 @@ class Anime(commands.Cog):
     async def scrape(
         self, 
         ctx, 
-        site: Literal['gogoanime', 'hianime', 'animecorner', 'anitrendz', 'all']='all', 
-        proxy_url=None
+        site: Literal['gogoanime', 'hianime', 'animecorner', 'anitrendz', 'all']='all',
+        opt=None
         ):
         """Scrape a specific source"""
         scraper_map = {
@@ -73,12 +74,24 @@ class Anime(commands.Cog):
             'animecorner': AnimeCorner,
             'anitrendz': AniTrendz
         }
-        color_map = {
-            'gogoanime': discord.Color.green(),
-            'hianime': discord.Color.dark_blue(),
-            'animecorner': discord.Color.yellow(),
-            'anitrendz': discord.Color.orange()
+        options = {
+            'gogoanime': range(1,10),
+            'hianime': ['day', 'week', 'month'],
+            'animecorner': ['week', 'season', 'year', 'anticipated'],
+            'anitrendz': None,
+            'all': None
         }
+        
+        tasks = []
+        page = period = None
+        if opt:
+            if options[site] and opt in options[site]:
+                page = opt if type(opt) == int else None
+                period = opt if type(opt) == str else None
+            else:
+                await ctx.send(f"{opt} not supported option for {site}, using defaults...")
+
+        proxy_url = await self.config.proxy_url()
 
         scrapers = []
         if site == 'all':
@@ -94,22 +107,13 @@ class Anime(commands.Cog):
             })
 
         await ctx.defer()
+        tasks = [s['scraper'].get_popular(page, period) if page or period else s['scraper'].get_popular() for s in scrapers]
         async with ctx.typing():
-            embeds = []
-            for scraper in scrapers:
-                embed: discord.Embed = discord.Embed(
-                    title=scraper['name'].upper(),
-                    color=color_map[scraper['name']]
-                )
-                embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-                results = await scraper['scraper'].get_popular()
-                if len(results) > 25:
-                    results = results[:25]
-                for result in results:
-                    embed.add_field(name=result['name'], value=f"`Score: {result['score']}`", inline=False)
-                embeds.append(embed)
-        
-        await ctx.send(embeds=embeds)
+            results = await asyncio.gather(*tasks)
+        trending = dict(zip([s['name'] for s in scrapers], results))
+        for s, t in trending.items():
+            self._result_cache[s] = t
+        await AnimeView(cog=self).start(ctx, sources=[k for k in trending])
 
     @anime.command(name="today", aliases=["now"])
     async def airingtoday(self, ctx):
@@ -186,29 +190,47 @@ class Anime(commands.Cog):
 
         sources = [AniList, MyAnimeList, GoGoAnime, HiAnime, AnimeCorner, AniTrendz]
         
-        trending = {}
+        tasks = []
         for source in sources:
-            trend = await source(proxy_url=proxy_url).get_popular()
-            trending[source.__name__.lower()] = trend[:10]
+            tasks.append(source(proxy_url=proxy_url).get_popular())
+
+        results = await asyncio.gather(*tasks)
+        trending = dict(zip([s.__name__.lower() for s in sources], [r[:10] for r in results]))
 
         self._result_cache = trending
 
         return trending
 
-    async def get_embed(
+    async def get_embeds(
         self, ctx: commands.Context, source: str
     ) -> discord.Embed:
-        embed: discord.Embed = discord.Embed(
+        embeds = []
+        embeds.append(discord.Embed(
             title=source.upper(),
             color=self.color_map[source],
-        )
+        ))
 
         if not self._result_cache:
             await ctx.send("no results cached, something went wrong")
 
         if source in self._result_cache:
-            for item in self._result_cache[source]:
-                embed.add_field(name=item['name'], value=f"`Score: {item['score']}`", inline=False)
+            chart_length = len(self._result_cache[source])
+            i = 0
+            while i < chart_length:
+                if i + 25 > chart_length:
+                    items = self._result_cache[source][i:]
+                else:
+                    items = self._result_cache[source][i:i+25]
+
+                embed: discord.Embed = discord.Embed(
+                    color=self.color_map[source]
+                )
+                embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+                for item in items:
+                    embed.add_field(name=item['name'], value=f"`Score: {item['score']}`", inline=False)
+                embeds.append(embed)
+
+                i += 25
         
         embed.timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
-        return embed
+        return embeds
