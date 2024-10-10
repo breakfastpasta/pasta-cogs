@@ -36,12 +36,12 @@ class Archiver(commands.Cog):
 
     @dl.command(name="channel")
     @commands.admin_or_permissions(manage_guild=True)
-    async def download_channel(self, ctx):
+    async def download_channel(self, ctx, *filetypes):
+        """Downloads all attachments with certain filetypes in a channel"""
         limit = await self.config.max()
         loc = await self.config.download_dir()
         if not os.path.exists(loc):
             os.makedirs(loc)
-            os.makedirs(os.path.join(loc, '.archive'))
 
         archive = ""
         count = 0
@@ -51,7 +51,7 @@ class Archiver(commands.Cog):
                 timestamp = message.created_at
                 for attachment in message.attachments:
                     fname = attachment.filename
-                    if fname.endswith(('.mp3', '.wav', '.flac')):
+                    if fname.endswith(filetypes):
                         save = await self._download_file(attachment=attachment, author=author, timestamp=timestamp)
                         archive += f"{save}\n"
                         count += 1
