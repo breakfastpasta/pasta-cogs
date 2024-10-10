@@ -56,7 +56,7 @@ class Archiver(commands.Cog):
                         archive += f"{save}\n"
                         count += 1
 
-        archive_filename = f"archive_{datetime.datetime.now(tz=datetime.timezone.utc)}.txt"
+        archive_filename = f"archive_{datetime.datetime.now(tz=datetime.timezone.utc).timestamp()}.txt"
         file = io.BytesIO(archive.encode('utf-8'))
         discord_file = discord.File(file, filename=archive_filename)
         file.close()
