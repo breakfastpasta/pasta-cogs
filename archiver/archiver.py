@@ -51,7 +51,7 @@ class Archiver(commands.Cog):
                 timestamp = message.created_at
                 for attachment in message.attachments:
                     fname = attachment.filename
-                    if fname.endswith(filetypes):
+                    if fname.endswith(tuple(f'.{f}' for f  in filetypes)):
                         save = await self._download_file(attachment=attachment, author=author, timestamp=timestamp)
                         archive += f"{save}\n"
                         count += 1
