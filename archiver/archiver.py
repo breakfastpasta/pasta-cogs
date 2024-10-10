@@ -25,17 +25,22 @@ class Archiver(commands.Cog):
         self.bot = bot
 
     @commands.group(name="dl", autohelp=True, aliases=["download"])
-    @commands.admin_or_permissions(manage_guild=True)
+    @commands.is_owner()
     async def dl(self, ctx):
         pass
 
     @commands.group(name="dlset")
-    @commands.admin_or_permissions(manage_guild=True)
+    @commands.is_owner()
     async def dlset(self, ctx):
         pass
 
-    @dl.command(name="channel")
-    @commands.admin_or_permissions(manage_guild=True)
+    @dl.group(name="channel", autohelp=True, aliases=["ch"])
+    @commands.is_owner()
+    async def channel(self, ctx):
+        pass
+
+    @channel.command(name="attachments")
+    @commands.is_owner()
     async def download_channel(self, ctx, *filetypes):
         """Downloads all attachments with certain filetypes in a channel"""
         limit = await self.config.max()
@@ -87,7 +92,7 @@ class Archiver(commands.Cog):
         return new_filename
 
     @dlset.command(name="limit")
-    @commands.admin_or_permissions(manage_guild=True)
+    @commands.is_owner()
     async def set_limit(self, ctx, limit: int):
         if limit < 0:
             limit = None
