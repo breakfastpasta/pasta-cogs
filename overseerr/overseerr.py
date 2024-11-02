@@ -7,7 +7,7 @@ from redbot.core import commands, app_commands
 from redbot.core import Config
 
 from .api import Overseerr_API
-from .view import RequestView
+from .view import RequestView, SearchView
 
 UNIQUE_ID = 0x6714473D
 
@@ -155,21 +155,29 @@ class Overseerr(commands.Cog):
     @commands.is_owner()
     async def _show_endpoint(self, ctx):
         await ctx.send(self.api.endpoint if self.api.endpoint else "no endpoint configured")
-    
+
     @overseerr.command(name="search", aliases=["se", "s"])
     @commands.guild_only()
-    async def search(self, ctx, query: str):
-        data = await self.api.search(query)
-        msg = ""
-        if data:
-            first = data[0]
-            title = first['title']
-            desc = first['overview']
-            release_date = first['releaseDate']
-            release_type = first['mediaType']
-            score = first['voteAverage']
-            msg += f"{title=}\n{desc=}\n{release_date=}\n{release_type=}\n{score=}"
-        return await ctx.send(msg)
+    async def search(self, ctx, *args):
+        query = ' '.join(map(str, args))
+        if not query:
+            await ctx.send("no query")
+            return
+
+        overseerr_keys = await self.bot.get_shared_api_tokens("overseerr")
+        if overseerr_keys.get("api_key") is None:
+            return await interaction.response.send_message("Overseerr API key not set. Use `[p]set api` with service `overseerr` to set the `api_key` value", ephemeral=True)
+
+        results = []
+        unfiltered_results = await self.api.search(query)
+        for r in unfiltered_results:
+            if r['mediaType'] in ['movie', 'tv']:
+                results.append(r)
+
+        if not results:
+            return await ctx.send("no results found for that query")
+
+        await SearchView(cog=self).start(ctx, results=results)
 
     @overseerr.command(name="me")
     @commands.guild_only()
