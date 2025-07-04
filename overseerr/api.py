@@ -33,8 +33,7 @@ class Overseerr_API():
 
         response = self._session.get(url, params=params, headers=self._headers)
         if not response.ok:
-            print("bad")
-            return
+            return []
 
         data = response.json()
         #ret = data
@@ -42,7 +41,7 @@ class Overseerr_API():
 
         return ret
 
-    async def get_user_by_discord_id(self, discord_user_id: str) -> int:
+    async def get_user_by_discord_id(self, discord_user_id: str) -> int|None:
         params = {}
         ret = None
         users = await self._get_users()
@@ -73,7 +72,6 @@ class Overseerr_API():
         response = self._session.post(url=url, json=data, headers=headers)
 
         if not response.ok:
-            print('bad')
             return
 
         data = response.json()
@@ -98,3 +96,4 @@ class Overseerr_API():
         if response.ok:
             data = response.json()['results']
             return data
+

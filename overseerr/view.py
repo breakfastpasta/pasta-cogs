@@ -79,7 +79,10 @@ class RequestView(discord.ui.View):
             media_type = self._results[self._page]['mediaType']
             await self.on_timeout()
             self.stop()
-            if await self.cog.make_request(media_type, media_id, user_id=self._user):
+            r = await self.cog.make_request(media_type, media_id, user_id=self._user)
+            if r is None:
+                await interaction.response.send_message("failure - that media is already available!", ephemeral=True)
+            elif r:
                 await interaction.response.send_message("success!", ephemeral=True)
             else:
                 await interaction.response.send_message("something went wrong", ephemeral=True)
@@ -165,3 +168,4 @@ class SearchView(discord.ui.View):
             embed=embed,
             view=self
         )
+

@@ -119,6 +119,11 @@ class Overseerr(commands.Cog):
         await RequestView(cog=self).start(interaction, results=results, user=user_id)
     
     async def make_request(self, media_type, media_id, user_id=None):
+        item = await self.api.get_item(media_type, media_id)
+        if item and (mi := item.get('mediaInfo')):
+            if mi['status'] in [4,5]:
+                logger.debug('found available')
+                return None
         if await self.api.create_request(media_type, media_id, user_id=user_id):
             return True
         return False
