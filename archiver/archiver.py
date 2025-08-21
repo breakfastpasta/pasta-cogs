@@ -18,7 +18,8 @@ class Archiver(commands.Cog):
         self.config = Config.get_conf(self, identifier=UNIQUE_ID, force_registration=True)
         default_global = {
             "max" : 200,
-            "download_dir": os.path.join(data_manager.cog_data_path(cog_instance=self), 'out')
+            "download_dir": os.path.join(data_manager.cog_data_path(cog_instance=self), 'out'),
+            "archive": []
         }
         self.config.register_global(**default_global)
 
@@ -48,21 +49,29 @@ class Archiver(commands.Cog):
         if not os.path.exists(loc):
             os.makedirs(loc)
 
-        archive = ""
+        archive = set(await self.config.archive())
+        archive_out = ""
         count = 0
         async with ctx.typing():
             async for message in ctx.channel.history(limit=limit):
                 author = message.author.name
                 timestamp = message.created_at
+                id = message.id
+                if id in archive:
+                    continue
                 for attachment in message.attachments:
                     fname = attachment.filename
                     if fname.endswith(tuple(f'.{f}' for f  in filetypes)):
                         save = await self._download_file(attachment=attachment, author=author, timestamp=timestamp)
-                        archive += f"{save}\n"
+                        if not save:
+                            continue
+                        archive_out += f"{id}:{save}\n"
+                        archive.add(id)
                         count += 1
 
-        archive_filename = f"archive_{datetime.datetime.now(tz=datetime.timezone.utc).timestamp()}.txt"
-        file = io.BytesIO(archive.encode('utf-8'))
+        await self.config.archive.set(list(archive))
+        archive_filename = f"archive_{int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())}.txt"
+        file = io.BytesIO(archive_out.encode('utf-8'))
         discord_file = discord.File(file, filename=archive_filename)
         file.close()
 
@@ -86,6 +95,8 @@ class Archiver(commands.Cog):
         new_filename = f"{author}-{name}_{file_hash[:8]}-{timestamp.strftime('%d%b%Y')}{extension}"
         
         full_path = os.path.join(loc, new_filename)
+        if os.path.exists(full_path):
+            return
         
         await attachment.save(full_path)
         
@@ -98,4 +109,16 @@ class Archiver(commands.Cog):
             limit = None
         await self.config.max.set(limit)
         await ctx.send(f"set max limit to {limit}")
+
+    @dlset.command(name="archive")
+    @commands.is_owner()
+    async def set_archive(self, ctx):
+        #ingest archive file, appending or replacing existing archive
+        ...
+
+    @dlset.command(name="forget")
+    @commands.is_owner()
+    async def forget(self,ctx):
+        await self.config.archive.set([])
+        await ctx.send("forgot archive")
 
