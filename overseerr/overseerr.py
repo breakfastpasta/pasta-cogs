@@ -73,11 +73,11 @@ class Overseerr(commands.Cog):
             for r in results:
                 match r['mediaType']:
                     case 'tv':
-                        name = f"[TV] {r['name']} ({r['firstAirDate'].split('-')[0]})"
+                        name = f"[TV] {r['name'][:88]} ({r['firstAirDate'].split('-')[0]})"
                         val = f"<id:{str(r['id'])}>,<type:{str(r['mediaType'])}>"
                         ret.append(app_commands.Choice(name=name, value=val))
                     case 'movie':
-                        name = f"[MOVIE] {r['title']} ({r['releaseDate'].split('-')[0]})"
+                        name = f"[MOVIE] {r['title'][:85]} ({r['releaseDate'].split('-')[0]})"
                         val = f"<id:{str(r['id'])}>,<type:{str(r['mediaType'])}>"
                         ret.append(app_commands.Choice(name=name, value=val))
                     case _:
